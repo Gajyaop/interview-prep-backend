@@ -14,9 +14,6 @@ import java.util.Map;
 @Service
 public class CodeExecutionService {
 
-    @Value("${judge0.api.key}")
-    private String apiKey;
-
     @Value("${judge0.api.url}")
     private String apiUrl;
 
@@ -33,8 +30,6 @@ public class CodeExecutionService {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(apiUrl))
                     .header("Content-Type", "application/json")
-                    .header("x-rapidapi-host", "judge0-extra-ce1.p.rapidapi.com")
-                    .header("x-rapidapi-key", apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
