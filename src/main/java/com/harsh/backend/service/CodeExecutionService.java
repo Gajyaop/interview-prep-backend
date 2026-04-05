@@ -20,9 +20,23 @@ public class CodeExecutionService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public CodeExecutionResult execute(String sourceCode, int languageId, String stdin) {
-        try {
-            String prompt = buildPrompt(sourceCode, languageId, stdin);
 
+        // Guard: empty code
+        if (sourceCode == null || sourceCode.isBlank()) {
+            return new CodeExecutionResult(null, null,
+                    "Please write your solution before running.", "No Code", 6);
+        }
+
+        String language = getLanguageName(languageId);
+
+        // Guard: only default template, nothing written
+        if (!hasUserCode(sourceCode, language)) {
+            return new CodeExecutionResult(null, null,
+                    "Please write your solution before running.", "No Solution Written", 6);
+        }
+
+        try {
+            String prompt = buildPrompt(sourceCode, language, stdin);
             String url = geminiApiUrl + "?key=" + geminiApiKey;
 
             Map<String, Object> requestBody = Map.of(
@@ -32,12 +46,20 @@ public class CodeExecutionService {
                             ))
                     ),
                     "generationConfig", Map.of(
-                            "temperature", 0.1
+                            "temperature", 0.1,
+                            "maxOutputTokens", 1024
                     )
             );
 
             ResponseEntity<Map> response = restTemplate.postForEntity(url, requestBody, Map.class);
             String output = extractText(response.getBody());
+
+            if (output == null || output.isBlank()) {
+                return new CodeExecutionResult(null, "Empty response from AI.", null, "Runtime Error", 11);
+            }
+
+            // Strip markdown backticks Gemini sometimes adds
+            output = stripMarkdown(output);
 
             if (output.startsWith("COMPILE_ERROR:")) {
                 String errorMsg = output.replace("COMPILE_ERROR:", "").trim();
@@ -60,46 +82,98 @@ public class CodeExecutionService {
         }
     }
 
-    private String buildPrompt(String sourceCode, int languageId, String stdin) {
-        String language = switch (languageId) {
-            case 62 -> "Java";
-            case 71 -> "Python";
-            case 54 -> "C++";
-            case 63 -> "JavaScript";
-            default -> "Unknown";
-        };
+    private boolean hasUserCode(String sourceCode, String language) {
+        for (String line : sourceCode.split("\n")) {
+            String t = line.trim();
+            if (t.isEmpty()) continue;
+            if (t.startsWith("//") || t.startsWith("#")) continue;
+            if (t.startsWith("import ")) continue;
+            if (t.startsWith("#include") || t.startsWith("using namespace")) continue;
+            if (t.equals("public class Main {")) continue;
+            if (t.equals("public static void main(String[] args) {")) continue;
+            if (t.equals("Scanner sc = new Scanner(System.in);")) continue;
+            if (t.equals("int main() {")) continue;
+            if (t.equals("return 0;")) continue;
+            if (t.equals("}")) continue;
+            return true; // found real user code
+        }
+        return false;
+    }
 
+    private String buildPrompt(String sourceCode, String language, String stdin) {
         String inputSection = (stdin != null && !stdin.isBlank())
                 ? "stdin:\n" + stdin
                 : "stdin: (none)";
 
         return """
-            You are a precise code execution engine for %s.
+            You are a code execution engine. Execute this %s code and return ONLY the output.
             
-            Rules (follow strictly):
-            - Return ONLY the program output, nothing else
-            - No markdown, no backticks, no explanation
-            - If compile error → respond ONLY with: COMPILE_ERROR: <error message>
-            - If runtime error → respond ONLY with: RUNTIME_ERROR: <error message>
-            - Simulate execution exactly as a real %s runtime would
+            STRICT RULES:
+            - Return ONLY what the program prints to stdout
+            - No markdown, no backticks, no explanation whatsoever
+            - If compile error: respond ONLY with COMPILE_ERROR: <message>
+            - If runtime error: respond ONLY with RUNTIME_ERROR: <message>
+            - If no output: respond with (no output)
             
             %s
             
             Code:
             %s
             
-            Output:""".formatted(language, language, inputSection, sourceCode);
+            Output:""".formatted(language, inputSection, sourceCode);
     }
 
     private String extractText(Map<?, ?> responseBody) {
         try {
-            var candidates = (List<?>) responseBody.get("candidates");
-            var content = (Map<?, ?>) ((Map<?, ?>) candidates.get(0)).get("content");
-            var parts = (List<?>) content.get("parts");
-            return ((Map<?, ?>) parts.get(0)).get("text").toString().trim();
+            // Check if response was blocked
+            if (responseBody.containsKey("promptFeedback")) {
+                Map<?, ?> feedback = (Map<?, ?>) responseBody.get("promptFeedback");
+                if (feedback.containsKey("blockReason")) {
+                    return "RUNTIME_ERROR: Request was blocked by safety filter.";
+                }
+            }
+
+            List<?> candidates = (List<?>) responseBody.get("candidates");
+            if (candidates == null || candidates.isEmpty()) {
+                return "RUNTIME_ERROR: No response received from AI.";
+            }
+
+            Map<?, ?> candidate = (Map<?, ?>) candidates.get(0);
+
+            // Check finish reason
+            String finishReason = (String) candidate.get("finishReason");
+            if ("SAFETY".equals(finishReason) || "RECITATION".equals(finishReason)) {
+                return "RUNTIME_ERROR: Response blocked by safety filter.";
+            }
+
+            Map<?, ?> content = (Map<?, ?>) candidate.get("content");
+            if (content == null) return "RUNTIME_ERROR: Empty content in AI response.";
+
+            List<?> parts = (List<?>) content.get("parts");
+            if (parts == null || parts.isEmpty()) return "RUNTIME_ERROR: Empty parts in AI response.";
+
+            Object text = ((Map<?, ?>) parts.get(0)).get("text");
+            return text != null ? text.toString().trim() : "RUNTIME_ERROR: Null text in AI response.";
+
         } catch (Exception e) {
-            return "RUNTIME_ERROR: Could not parse AI response";
+            return "RUNTIME_ERROR: Could not parse AI response - " + e.getMessage();
         }
+    }
+
+    private String stripMarkdown(String output) {
+        output = output.replaceAll("```[a-zA-Z]*\\n?", "");
+        output = output.replaceAll("```", "");
+        return output.trim();
+    }
+
+    private String getLanguageName(int languageId) {
+        return switch (languageId) {
+            case 62 -> "Java";
+            case 71 -> "Python";
+            case 54 -> "C++";
+            case 63 -> "JavaScript";
+            default -> "Unknown";
+        };
     }
 
     public record CodeExecutionResult(
