@@ -4,6 +4,7 @@ import com.harsh.backend.entity.PasswordResetToken;
 import com.harsh.backend.entity.User;
 import com.harsh.backend.repository.PasswordResetTokenRepository;
 import com.harsh.backend.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.SimpleMailMessage;
@@ -21,19 +22,19 @@ public class PasswordResetService {
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
 
-    @Value("${app.frontend.url}")
+    @Autowired(required = false)
+    private JavaMailSender mailSender;
+
+    @Value("${app.frontend.url:http://localhost:3000}")
     private String frontendUrl;
 
     public PasswordResetService(UserRepository userRepository,
                                 PasswordResetTokenRepository tokenRepository,
-                                PasswordEncoder passwordEncoder,
-                                JavaMailSender mailSender) {
+                                PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.passwordEncoder = passwordEncoder;
-        this.mailSender = mailSender;
     }
 
     public void sendResetEmail(String email) {
@@ -47,13 +48,15 @@ public class PasswordResetService {
             prt.setExpiresAt(LocalDateTime.now().plusMinutes(15));
             tokenRepository.save(prt);
 
-            String link = frontendUrl + "/reset-password?token=" + token;
-            SimpleMailMessage msg = new SimpleMailMessage();
-            msg.setTo(email);
-            msg.setSubject("Reset your Interview PrepPro password");
-            msg.setText("Click to reset your password (valid 15 minutes):\n\n" + link +
-                    "\n\nIf you didn't request this, ignore this email.");
-            mailSender.send(msg);
+            if (mailSender != null) {
+                String link = frontendUrl + "/reset-password?token=" + token;
+                SimpleMailMessage msg = new SimpleMailMessage();
+                msg.setTo(email);
+                msg.setSubject("Reset your Interview PrepPro password");
+                msg.setText("Click to reset your password (valid 15 minutes):\n\n" + link +
+                        "\n\nIf you didn't request this, ignore this email.");
+                mailSender.send(msg);
+            }
         });
     }
 
