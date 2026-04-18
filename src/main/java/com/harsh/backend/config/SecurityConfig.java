@@ -79,6 +79,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/feedback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/ai/chat").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/ai/resume/analyze").permitAll()
+                        .requestMatchers("/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+
                         .anyRequest().authenticated()
                 )
 
