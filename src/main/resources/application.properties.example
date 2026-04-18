@@ -1,0 +1,14 @@
+spring.datasource.url=jdbc:postgresql://localhost:5432/ai_backend_db
+spring.datasource.username=postgres
+spring.datasource.password=yourpassword
+
+google.client.id=your-google-client-id
+gemini.api.key=your-gemini-api-key
+gemini.api.url=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+
+server.port=8080
+
+spring.mail.username=yourgmail@gmail.com
+spring.mail.password=your-app-password
+
+app.frontend.url=http://localhost:3000
