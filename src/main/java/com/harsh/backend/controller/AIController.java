@@ -120,6 +120,60 @@ public class AIController {
     public record ReviewResponse(
             String feedback
     ) {}
+    @PostMapping("/resume/generate-questions")
+    public ResponseEntity<Map<String, Object>> generateResumeQuestions(
+            @RequestBody Map<String, String> body) {
+
+        String resumeText = body.get("resumeText");
+        String targetRole = body.get("targetRole");
+        String difficulty = body.getOrDefault("difficulty", "MEDIUM");
+
+        String prompt = """
+        You are an expert technical interviewer. Based on the following resume, 
+        generate exactly 10 multiple choice interview questions for a %s position 
+        at %s difficulty level.
+        
+        Resume:
+        %s
+        
+        Rules:
+        - Focus on skills, technologies, and experience mentioned in the resume
+        - Mix technical questions about their specific tech stack
+        - Include questions about their project experience
+        - Include 1-2 behavioral questions based on their background
+        - Each question must have exactly 4 options (A, B, C, D)
+        - One correct answer per question
+        
+        Return ONLY a JSON array in this exact format, no other text:
+        [
+          {
+            "question": "question text here",
+            "options": ["option A", "option B", "option C", "option D"],
+            "correctAnswer": "option A",
+            "topic": "topic name",
+            "explanation": "why this answer is correct"
+          }
+        ]
+        """.formatted(targetRole, difficulty, resumeText);
+
+        try {
+            String aiResponse = aiQuestionService.callGeminiRaw(prompt);
+            // Clean response — remove markdown code blocks if present
+            String cleaned = aiResponse
+                    .replaceAll("```json", "")
+                    .replaceAll("```", "")
+                    .trim();
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("questions", cleaned);
+            result.put("targetRole", targetRole);
+            result.put("difficulty", difficulty);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(500)
+                    .body(Map.of("error", "Failed to generate questions: " + e.getMessage()));
+        }
+    }
 
     @PostMapping("/generate")
     public ResponseEntity<GenerateResponse> generate(

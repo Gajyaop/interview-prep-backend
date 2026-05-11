@@ -80,6 +80,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/ai/chat").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/ai/resume/analyze").permitAll()
                         .requestMatchers("/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/ai/resume/generate-questions").permitAll()
 
                         .anyRequest().authenticated()
                 )

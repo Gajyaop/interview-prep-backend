@@ -74,6 +74,30 @@ public class AIQuestionService {
             default -> "general knowledge";
         };
     }
+    public String callGeminiRaw(String prompt) {
+        // Build request body
+        Map<String, Object> requestBody = new HashMap<>();
+        Map<String, Object> content = new HashMap<>();
+        Map<String, String> part = new HashMap<>();
+        part.put("text", prompt);
+        content.put("parts", List.of(part));
+        content.put("role", "user");
+        requestBody.put("contents", List.of(content));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        String url = geminiApiUrl + "?key=" + geminiApiKey;
+        ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
+
+        // Extract text from response
+        List<Map> candidates = (List<Map>) response.getBody().get("candidates");
+        Map content0 = (Map) candidates.get(0).get("content");
+        List<Map> parts = (List<Map>) content0.get("parts");
+        return (String) parts.get(0).get("text");
+    }
 
     private String callGemini(String prompt) {
         try {
